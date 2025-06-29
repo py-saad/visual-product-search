@@ -28,11 +28,11 @@ async def lifespan(app: FastAPI):
     _products = load_products()
     _products_by_id = {p.id: p for p in _products}
     search_service.load(_products)
-    logger.info(f"Loaded {len(_products)} products")
+    logger.info(f"Loaded {len(_products)} products, index ready: {search_service.ready}")
     yield
 
 
-app = FastAPI(title="Visual Product Search", lifespan=lifespan)
+app = FastAPI(title="Visual Product Search", version="0.1.0", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -70,8 +70,12 @@ async def search_by_image(file: UploadFile = File(...)):
 
 
 @app.get("/api/search/text", response_model=SearchResponse)
-def search_by_text(q: str = Query(..., min_length=1)):
+def search_by_text(q: str = Query(..., min_length=1, max_length=200)):
+    """
+    Natural-language search via CLIP text encoder.
+    Queries are matched against product *images* — not just titles.
+    """
     if not search_service.ready:
         raise HTTPException(503, "Search index not ready. Run scripts/build_index.py first.")
-    results = search_service.search_by_text(q, _products_by_id)
+    results = search_service.search_by_text(q.strip(), _products_by_id)
     return SearchResponse(results=results, query_type="text")
